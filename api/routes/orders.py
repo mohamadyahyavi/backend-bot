@@ -1,27 +1,66 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from api.database import SessionLocal
+from api.models.user import User
 from api.models.order import Order
-from api.models.order_item import OrderItem
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
+# -----------------------------
+# DB Dependency
+# -----------------------------
 async def get_db():
     async with SessionLocal() as session:
         yield session
 
 
+# -----------------------------
+# GET OR CREATE USER (IMPORTANT)
+# -----------------------------
+async def get_or_create_user(telegram_id: int, db: AsyncSession):
+
+    result = await db.execute(
+        select(User).where(User.telegram_id == telegram_id)
+    )
+
+    user = result.scalar_one_or_none()
+
+    if user:
+        return user
+
+    # اگر کاربر وجود نداشت → ساخته می‌شود
+    user = User(
+        telegram_id=telegram_id,
+        username=None,
+        first_name="Unknown"
+    )
+
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return user
+
+
+# -----------------------------
+# CREATE ORDER
+# -----------------------------
 @router.post("/")
 async def create_order(
-    user_id: int,
+    telegram_id: int,
     total_price: float,
     db: AsyncSession = Depends(get_db)
 ):
 
+    # 1. گرفتن یا ساخت کاربر
+    user = await get_or_create_user(telegram_id, db)
+
+    # 2. ساخت سفارش با user_id (نه telegram_id)
     order = Order(
-        user_id=user_id,
+        user_id=user.id,
         total_price=total_price,
         status="pending"
     )
@@ -30,27 +69,11 @@ async def create_order(
     await db.commit()
     await db.refresh(order)
 
-    return order
-
-
-@router.post("/item")
-async def add_order_item(
-    order_id: int,
-    product_id: int,
-    quantity: int,
-    price: float,
-    db: AsyncSession = Depends(get_db)
-):
-
-    item = OrderItem(
-        order_id=order_id,
-        product_id=product_id,
-        quantity=quantity,
-        price=price
-    )
-
-    db.add(item)
-    await db.commit()
-    await db.refresh(item)
-
-    return item
+    # 3. پاسخ
+    return {
+        "order_id": order.id,
+        "user_id": user.id,
+        "telegram_id": user.telegram_id,
+        "username": user.username,
+        "first_name": user.first_name
+    }

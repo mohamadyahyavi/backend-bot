@@ -52,19 +52,23 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/")
 async def create_product(
     name: str,
-    price: float,
+    description: str | None = None,
+    price: float = 0,
     stock: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
 
     product = Product(
         name=name,
+        description=description,
         price=price,
         stock=stock
     )
 
     db.add(product)
+
     await db.commit()
+
     await db.refresh(product)
 
     return product

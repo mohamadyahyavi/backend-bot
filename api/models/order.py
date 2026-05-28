@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, Float, ForeignKey, String
+from sqlalchemy.orm import relationship
 from api.database import Base
 
 
@@ -16,3 +17,4 @@ class Order(Base):
     total_price = Column(Float, nullable=False)
 
     status = Column(String, default="pending")
+    items = relationship("order_items", backref="order")
